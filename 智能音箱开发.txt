@@ -109,3 +109,4 @@
      6.命令工具：
           查看播放设备     aplay -l 
           查看录音设备     arecord -l
+     7.完善发布流程规范：补充 .gitignore 排除策略、HTTPS/PAT 认证操作、TLS 网络重试方法，并更新发布 Skill 规则与安全约束（token 泄露即撤销重建）。
