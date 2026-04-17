@@ -1,0 +1,9 @@
+*.o
+smart_speaker
+toolchain/
+sherpa/
+third_party/
+
+# ALSA prebuilt/shared libs that fail indexing on Windows
+third_party/alsa/lib/*.so
+third_party/alsa/lib/*.so.*
