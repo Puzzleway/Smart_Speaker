@@ -249,15 +249,17 @@ void child_process(char*music_name)
                 
 			strcat(music_path, music_name);
 
-			char *arg[7] = {0};
+			char *arg[9] = {0};
 
 			arg[0] = "mplayer";
 			arg[1] = music_path;
-			arg[2] = "-slave";
-			arg[3] = "-quiet";
-			arg[4] = "-input";
-			arg[5] = "file=./fifo/cmd_fifo";
-			arg[6] = NULL;
+			arg[2] = "-ao";
+			arg[3] = "alsa:device=hw=1.0";
+			arg[4] = "-slave";
+			arg[5] = "-quiet";
+			arg[6] = "-input";
+			arg[7] = "file=./fifo/cmd_fifo";
+			arg[8] = NULL;
 
             if(execv("/usr/bin/mplayer",arg)== -1)
             {

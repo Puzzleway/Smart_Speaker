@@ -110,3 +110,14 @@
           查看播放设备     aplay -l 
           查看录音设备     arecord -l
      7.完善发布流程规范：补充 .gitignore 排除策略、HTTPS/PAT 认证操作、TLS 网络重试方法，并更新发布 Skill 规则与安全约束（token 泄露即撤销重建）。
+
+
+2026.04.18 
+
+     1.完成 asr/makefile 多轮整理与修正：从交叉编译模板出发补齐 ALSA/Sherpa 头库路径、目标文件与链接参数，逐步定位并处理 -lsherpa-onnx-c-api 找不到、链接器选择不当等问题。 
+     2.定位并修复 init_asr 隐式声明告警：分析为头文件保护宏与声明可见性问题，调整 alsa.h 宏名与声明位置，消除编译阶段函数声明异常。 
+     3.完成 Sherpa 动态库加载问题排查：通过 ldconfig 与库路径配置解决 libsherpa-onnx-c-api.so 运行时找不到，打通 ASR 可执行文件启动链路。 
+     4.定位并解决 FIFO 启动阻塞问题：确认 open("/home/fifo/asr_fifo", O_WRONLY) 在无读端时阻塞，后续改为 O_RDWR 规避卡住；同时排查并修复 FIFO 文件属主/权限导致的 open fifo error。 
+     5.完成板端声卡设备适配：根据实际设备将录音设备参数调整为可用节点（hw:0,0），解决 snd_pcm_open error，使主流程恢复可运行。 
+     6.完成关键词识别失败根因定位：确认代码唤醒词与 keywords.txt 实际词条不一致（如代码用“你好小胖”，模型词表无此项），统一关键词文本。 
+     7.命令工具： 安装 ALSA 开发包 apt install -y libasound2-dev 板端安装 json-c apt install -y libjson-c-dev，并统一开发板“系统默认路径”编译思路。 
