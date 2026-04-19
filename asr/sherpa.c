@@ -7,7 +7,7 @@ unsigned int target_rate = 16000;
 const SherpaOnnxOnlineStream *asr_stream = NULL;
 const SherpaOnnxOnlineRecognizer *asr_recognizer = NULL;
 
-extern int asr_fd;
+extern int asr_fd;// asr_fifo的文件描述符
 
 int init_sherpa_asr()
 {

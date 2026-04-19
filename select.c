@@ -24,6 +24,7 @@ extern int g_maxfd;
 extern int g_socketfd;
 extern int g_tid;
 extern int g_buttonfd;
+extern int g_asrfd;
 
 fd_set g_readfds;//监听集合
 //select()监听集合初始化函数
@@ -178,6 +179,90 @@ void select_read_button(void)
     device_read_button();
 }
 
+void select_read_asr_fifo(void)
+{
+    char buf[1024] = {0};
+    ssize_t size = read(g_asrfd, buf, sizeof(buf));
+    if(size > 0)
+    {
+        printf("[select]read from asr_fifo: %s\n", buf);
+    }
+    else if(size == 0)
+    {
+        // 管道另一端关闭
+        printf("[select]asr_fifo closed\n");
+        FD_CLR(g_asrfd, &g_readfds);
+        if(g_asrfd == g_maxfd)
+        {
+            g_maxfd = g_maxfd - 1;
+        }
+        return;
+    }
+    else if(size == -1)
+    {
+        perror("read asr_fifo");
+    }
+
+    if(strstr(buf, "我想听歌") ||
+    strstr(buf, "放首歌听听") ||
+    strstr(buf, "放一首歌") )
+    {
+        player_start_play();
+    }
+    else if(strstr(buf, "暂停") ||
+    strstr(buf, "暂停播放") ||
+    strstr(buf, "暂停一下") )
+    {
+        player_pause_play();
+    }
+    else if(strstr(buf, "继续") ||
+    strstr(buf, "继续播放") ||
+    strstr(buf, "接着放") )
+    {
+        player_continue_play();
+    }
+    else if(strstr(buf, "下一首") ||
+    strstr(buf, "下一首歌") ||
+    strstr(buf, "放下一首") )
+    {
+        player_next_play();
+    }
+    else if(strstr(buf, "上一首") ||
+    strstr(buf, "上一首歌") ||
+    strstr(buf, "放上一首") )
+    {
+        player_prev_play();
+    }
+    else if(strstr(buf, "增加音量") ||
+    strstr(buf, "调大音量") ||
+    strstr(buf, "大点声") ||
+    strstr(buf, "声音大点") )
+    {
+        player_add_volume();
+    }
+    else if(strstr(buf, "减小音量") ||
+    strstr(buf, "调小音量") ||
+    strstr(buf, "小点声") ||
+    strstr(buf, "声音小点") )
+    {
+        player_reduce_volume();
+    }
+    else if(strstr(buf, "单曲循环") )
+    {
+        player_set_mode(CIRCLE);
+    }
+    else if(strstr(buf, "列表循环") )
+    {
+        player_set_mode(SEQUENCE);
+    }
+    else if(strstr(buf, "停止") ||
+    strstr(buf, "停止播放") ||
+    strstr(buf, "结束") )
+    {
+        player_stop_play();
+    }
+}
+
 void master_select(void)
 { 
     fd_set TMPSET;
@@ -207,6 +292,9 @@ void master_select(void)
         else if(FD_ISSET(g_buttonfd,&TMPSET))// 按键监听
         {
             select_read_button();
+        }else if(FD_ISSET(g_asrfd,&TMPSET))// asr_fifo监听
+        {
+            select_read_asr_fifo();
         }
     }
 }

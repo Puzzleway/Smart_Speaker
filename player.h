@@ -11,6 +11,7 @@
 
 #include<sys/types.h>
 #include<unistd.h>
+#include<time.h>
 
 #define SHM_KEY 1000//共享内存的key值
 #define SEM_KEY 1234//信号量的key值
@@ -43,6 +44,10 @@ typedef struct
     pid_t parent_pid;//父进程的pid
 	pid_t child_pid;//子进程的pid
     pid_t grand_pid;//孙进程的pid
+    /* 手动上一首离开的那首歌 basename，用于曲终自动接歌时跳过「刚离开的那首」避免弹回 */
+    char prev_leave_basename[128];//上一首离开的那首歌的basename
+    time_t manual_seek_at;//手动上一首的时间
+    int post_seek_retry_used;/* 手动 loadfile 后第一次曲终若为瞬时失败则只重试同一首一次 */
 }SHM_DATA;
 
 int init_sem(void);
@@ -64,5 +69,5 @@ void player_add_volume(void);
 void player_reduce_volume(void);
 void player_set_mode(int mode);
 int write_fifo(const char* cmd);
-
+int init_asr_fifo(void);
 #endif

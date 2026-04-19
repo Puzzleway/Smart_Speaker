@@ -77,7 +77,7 @@ int sherpa_kws(float *float_buffer, int resample_frams)
 			}
 			else if (device_mode == OFFLINE_MODE && 
 					 strcmp(r->keyword, "你好问问")) 
-			{  //离线模式，不需要 你好小胖 来唤醒
+			{  //离线模式，不需要 你好问问 来唤醒
 				if (write(asr_fd, r->keyword, strlen(r->keyword)) == -1)
 				{
 					perror("write fifo");

@@ -15,6 +15,67 @@
 
 
 Node *g_music_head = NULL;//音乐播放链表头节点指针
+
+/* 与共享内存中 music_name（多为 basename）对齐：按最后一段文件名比较 */
+static void link_copy_basename(const char *path, char *out, size_t outsz)
+{
+	const char *slash;
+	if (!path || !out || outsz == 0)
+	{
+		if (out && outsz)
+			out[0] = '\0';
+		return;
+	}
+	slash = strrchr(path, '/');
+	if (slash)
+		strncpy(out, slash + 1, outsz - 1);
+	else
+		strncpy(out, path, outsz - 1);
+	out[outsz - 1] = '\0';
+}
+
+static int link_refs_equal(const char *stored_path, const char *cur_ref)
+{
+	char bn_stored[128], bn_ref[128];
+	if (!cur_ref || !cur_ref[0])
+		return 0;
+	link_copy_basename(stored_path, bn_stored, sizeof(bn_stored));
+	if (strchr(cur_ref, '/'))
+	{
+		link_copy_basename(cur_ref, bn_ref, sizeof(bn_ref));
+		return strcmp(bn_stored, bn_ref) == 0;
+	}
+	return strcmp(bn_stored, cur_ref) == 0;
+}
+
+Node *link_find_node_by_ref(const char *cur_ref)
+{
+	Node *p = g_music_head->next;
+	while (p)
+	{
+		if (link_refs_equal(p->music_name, cur_ref))
+			return p;
+		p = p->next;
+	}
+	return NULL;
+}
+
+int link_full_path_by_basename(const char *basename, char *full_out)
+{
+	Node *p = g_music_head->next;
+	if (!basename || !basename[0] || !full_out)
+		return -1;
+	while (p)
+	{
+		if (link_refs_equal(p->music_name, basename))
+		{
+			strcpy(full_out, p->music_name);
+			return 0;
+		}
+		p = p->next;
+	}
+	return -1;
+}
 //链表初始化函数
 int init_link()
 {
@@ -97,7 +158,7 @@ int link_insert_elem(const char *name)
 
 	return 0;
 }
-
+//遍历链表
 void link_traverse_list()
 {
 	Node *p = g_music_head->next;
@@ -109,6 +170,7 @@ void link_traverse_list()
 	}
 	printf("\n");//不加换行，不刷新
 }
+
 void link_clear_list()
 {
 	Node *p = g_music_head->next;
@@ -126,13 +188,10 @@ void link_clear_list()
 int link_find_next(int mode, char *cur_name,char *next_name)
 {
     if(NULL == cur_name||NULL == next_name)return -1;
-    
-    Node *p = g_music_head->next;
-    while(p)
-    {
-        if(strstr(p->music_name,cur_name))break;// 子串在字符串中，返回子串的起始位置
-        p = p->next;//往后移动
-    }
+    if (!cur_name[0])
+        return -1;
+
+    Node *p = link_find_node_by_ref(cur_name);
     if(p == NULL)
         return -1;
     if(mode == CIRCLE){
@@ -148,14 +207,10 @@ int link_find_next(int mode, char *cur_name,char *next_name)
 int link_find_prev(int mode, char *cur_name,char *pre_name)
 {//查找上一首歌：单曲循环仍为当前曲；顺序/随机在第一首时环绕到最后一首
     if(NULL == cur_name||NULL == pre_name)return -1;
+    if (!cur_name[0])
+        return -1;
 
-    Node *p = g_music_head->next;
-    while(p)
-    {
-        if(strstr(p->music_name,cur_name))
-            break;
-        p = p->next;
-    }
+    Node *p = link_find_node_by_ref(cur_name);
     if(p == NULL)
         return -1;
 

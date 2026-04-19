@@ -149,22 +149,21 @@ int main()
     pthread_t tid;
     //接收客户端发送的数据
     pthread_create(&tid, NULL, recv_from_client, (void *)&clientfd);
-    sleep(2);// 等待2秒
-
+    // sleep(2);// 等待2秒
     //测试客户端对app命令的处理
-    struct json_object *obj = json_object_new_object();
-    json_object_object_add(obj, "cmd", json_object_new_string("app_start"));
-    send_to_client(clientfd, obj);//向客户端发送数据，通知客户端开始播放
-    sleep(5);// 等待
-    json_object_object_add(obj, "cmd", json_object_new_string("app_mode_circle"));
-    send_to_client(clientfd, obj);
-    sleep(5);
-    json_object_object_add(obj, "cmd", json_object_new_string("app_next"));
-    send_to_client(clientfd, obj);//向客户端发送数据，通知客户端下一首
-    sleep(5);// 等待
-    json_object_object_add(obj, "cmd", json_object_new_string("app_mode_sequence"));
-    send_to_client(clientfd, obj);
-    sleep(5);
+    // struct json_object *obj = json_object_new_object();
+    // json_object_object_add(obj, "cmd", json_object_new_string("app_start"));
+    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端开始播放
+    // sleep(5);// 等待
+    // json_object_object_add(obj, "cmd", json_object_new_string("app_mode_circle"));
+    // send_to_client(clientfd, obj);
+    // sleep(5);
+    // json_object_object_add(obj, "cmd", json_object_new_string("app_next"));
+    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端下一首
+    // sleep(5);// 等待
+    // json_object_object_add(obj, "cmd", json_object_new_string("app_mode_sequence"));
+    // send_to_client(clientfd, obj);
+    // sleep(5);
     // json_object_object_add(obj, "cmd", json_object_new_string("app_add_volume"));
     // send_to_client(clientfd, obj);
     // json_object_object_add(obj, "cmd", json_object_new_string("app_add_volume"));
@@ -187,9 +186,9 @@ int main()
     // json_object_object_add(obj, "cmd", json_object_new_string("app_prev"));
     // send_to_client(clientfd, obj);
     // sleep(5);// 等待
-    json_object_object_add(obj, "cmd", json_object_new_string("app_stop"));
-    send_to_client(clientfd, obj);//向客户端发送数据，通知客户端停止播放
-    json_object_put(obj);//释放json对象
+    // json_object_object_add(obj, "cmd", json_object_new_string("app_stop"));
+    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端停止播放
+    // json_object_put(obj);//释放json对象
 
 
     while(1)

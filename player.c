@@ -19,6 +19,7 @@
 #include<sys/stat.h>
 #include <sys/sem.h>
 #include<errno.h>
+#include<time.h>
 
 
 #include "player.h"
@@ -32,8 +33,11 @@ int g_start_flag = 0; //播放标志，0表示未开始播放，1表示正在播
 int g_volume = 50; //音量，范围0-100
 int g_pause_flag = 0; //暂停标志，0表示未暂停，1表示已暂停
 int g_device_mode = ONLINE_MODE;
+int g_asrfd = 0; //asr_fifo的文件描述符
 
 extern Node *g_music_head;
+extern fd_set g_readfds;
+extern int g_maxfd;
 
 int init_sem()
 {
@@ -119,6 +123,15 @@ int init_shm()
                 perror("shmget attach");
                 return -1;
             }
+            void *addr = shmat(g_shmid, NULL, 0);
+            if (addr != (void *)-1)
+            {
+                SHM_DATA *ps = (SHM_DATA *)addr;
+                ps->prev_leave_basename[0] = '\0';
+                ps->manual_seek_at = 0;
+                ps->post_seek_retry_used = 0;
+                shmdt(addr);
+            }
             return 0;
         }
         perror("shmget create");
@@ -167,6 +180,15 @@ void parent_set_shm_data(SHM_DATA shm_data)
 void player_start_play(void)
 {
     if(g_start_flag == 1)return;
+    SHM_DATA sd;
+    parent_get_shm_data(&sd);
+    sd.prev_leave_basename[0] = '\0';
+    sd.manual_seek_at = 0;
+    sd.post_seek_retry_used = 0;
+    player_sem_p();
+    parent_set_shm_data(sd);
+    player_sem_v();
+
     char music_name[128] = {0};
     strcpy(music_name,g_music_head->next->music_name);
     g_start_flag = 1;
@@ -213,14 +235,48 @@ void child_process(char*music_name)
             parent_get_shm_data(&s);
             if(strlen(music_name) == 0)//当第二次创建孙进程并进入
             {
-                //链表新的节点
-                if(link_find_next(s.mode,s.music_name,music_name) == -1)
+                time_t now = time(NULL);
+                int fast_after_manual = (s.manual_seek_at != 0
+                    && (now - s.manual_seek_at) <= 2);
+
+                if (fast_after_manual && !s.post_seek_retry_used
+                    && link_full_path_by_basename(s.music_name, music_name) == 0)
                 {
-                    printf("全部歌曲播放完毕······\n");
-                    kill(s.parent_pid,SIGUSR1);//给两个上级进程发送信号
-                    kill(s.child_pid,SIGUSR1);
-                    usleep(100000);
-                    exit(0);
+                    s.post_seek_retry_used = 1;
+                    player_sem_p();
+                    parent_set_shm_data(s);
+                    player_sem_v();
+                }
+                else
+                {
+                    s.post_seek_retry_used = 0;
+                    if (link_find_next(s.mode, s.music_name, music_name) == -1)
+                    {
+                        printf("全部歌曲播放完毕······\n");
+                        kill(s.parent_pid,SIGUSR1);
+                        kill(s.child_pid,SIGUSR1);
+                        usleep(100000);
+                        exit(0);
+                    }
+
+                    parent_get_shm_data(&s);
+                    if (s.prev_leave_basename[0])
+                    {
+                        const char *sl = strrchr(music_name, '/');
+                        char cand_bn[128];
+                        strncpy(cand_bn, sl ? sl + 1 : music_name, sizeof(cand_bn) - 1);
+                        cand_bn[sizeof(cand_bn) - 1] = '\0';
+                        if (strcmp(cand_bn, s.prev_leave_basename) == 0)
+                        {
+                            Node *nb = link_find_node_by_ref(music_name);
+                            if (nb && nb->next != NULL)
+                                strcpy(music_name, nb->next->music_name);
+                        }
+                        s.prev_leave_basename[0] = '\0';
+                        player_sem_p();
+                        parent_set_shm_data(s);
+                        player_sem_v();
+                    }
                 }
             }
 
@@ -258,7 +314,7 @@ void child_process(char*music_name)
 			arg[4] = "-slave";
 			arg[5] = "-quiet";
 			arg[6] = "-input";
-			arg[7] = "file=./fifo/cmd_fifo";
+			arg[7] = "file=/home/fifo/cmd_fifo";
 			arg[8] = NULL;
 
             if(execv("/usr/bin/mplayer",arg)== -1)
@@ -338,7 +394,13 @@ void player_next_play(void)
             p++;
         }
         strcpy(shm_data.music_name,p+1);
+    }else if(g_device_mode == OFFLINE_MODE)
+    {
+        strcpy(shm_data.music_name,music_name);
     }
+    shm_data.manual_seek_at = time(NULL);
+    shm_data.post_seek_retry_used = 0;
+    shm_data.prev_leave_basename[0] = '\0';
     player_sem_p();//P操作，进入临界区
     parent_set_shm_data(shm_data);//更新修改共享内存
     player_sem_v();//V操作，离开临界区
@@ -357,35 +419,48 @@ void player_next_play(void)
 
 void player_prev_play(void)
 {
-    if(g_start_flag == 0)return;
+    if(g_start_flag == 0)return;// 没有播放
     SHM_DATA shm_data;
     parent_get_shm_data(&shm_data);
     char music_name[128] = {0};
-    if(link_find_prev(shm_data.mode,shm_data.music_name,music_name) == -1)
-    {//没有上一首
-        if(g_device_mode == ONLINE_MODE)
+    if(link_find_prev(shm_data.mode,shm_data.music_name,music_name) == -1)// 没有上一首
+    {
+        if(g_device_mode == ONLINE_MODE)// 在线模式
         {
-            player_stop_play();
-            link_clear_list();
-            socket_get_music(shm_data.singer);
-            player_start_play();
+            player_stop_play();// 停止播放
+            link_clear_list();// 清空链表
+            socket_get_music(shm_data.singer);// 获取歌手音乐列表
+            player_start_play();// 开始播放
             return;
         }else if(g_device_mode == OFFLINE_MODE)
         {
-            printf("没有上一首······\n");
-            player_stop_play();
+            printf("没有上一首······\n");// 没有上一首
+            player_stop_play();// 停止播放
             return;
         }
     }
+    {
+        const char *ls = strrchr(shm_data.music_name, '/');
+        strncpy(shm_data.prev_leave_basename,
+            ls ? ls + 1 : shm_data.music_name,
+            sizeof(shm_data.prev_leave_basename) - 1);
+        shm_data.prev_leave_basename[sizeof(shm_data.prev_leave_basename) - 1] = '\0';
+    }
     if(g_device_mode == ONLINE_MODE)
     {
-        const char *p = music_name;
+        const char *p = music_name;// 获取音乐名称
         while(*p != '/')
         {
             p++;
         }
-        strcpy(shm_data.music_name,p+1);
+        strcpy(shm_data.music_name,p+1);// 更新共享内存中的音乐名称
     }
+    else if(g_device_mode == OFFLINE_MODE)
+    {
+        strcpy(shm_data.music_name,music_name);
+    }
+    shm_data.manual_seek_at = time(NULL);
+    shm_data.post_seek_retry_used = 0;
     player_sem_p();//P操作，进入临界区
     parent_set_shm_data(shm_data);
     player_sem_v();//V操作，离开临界区
@@ -447,7 +522,7 @@ void player_set_mode(int mode)
 }
 int write_fifo(const char* cmd)
 {
-    int fd = open("./fifo/cmd_fifo",O_WRONLY);
+    int fd = open("/home/fifo/cmd_fifo",O_WRONLY);
     if(fd == -1)
     {
         perror("OPEN FIFO\n");
@@ -463,3 +538,19 @@ int write_fifo(const char* cmd)
     return 0;
 }
 
+int init_asr_fifo()
+{
+    g_asrfd = open("/home/fifo/asr_fifo",O_RDONLY);
+    if(g_asrfd == -1)
+    {
+        perror("open /home/fifo/asr_fifo");
+        return -1;
+    }
+
+    FD_SET(g_asrfd, &g_readfds);
+    if(g_asrfd > g_maxfd)
+    {
+        g_maxfd = g_asrfd;
+    }
+    return 0;
+}

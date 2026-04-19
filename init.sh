@@ -11,8 +11,9 @@ if [ ! -z $sem_id ]; then
   ipcrm -s $sem_id
 fi
 
-rm -rf ./fifo
-mkdir -p ./fifo
+rm -rf /home/fifo
+mkdir -p /home/fifo
 
-mkfifo ./fifo/cmd_fifo
+mkfifo /home/fifo/cmd_fifo
+mkfifo /home/fifo/asr_fifo
 #这是一个在启动后执行的脚本，主要功能是清理共享内存，以确保播放器能够正常运行。

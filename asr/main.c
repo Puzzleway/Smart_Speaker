@@ -82,10 +82,11 @@ int main()
 	printf("关键词加载成功\n");
 
 	// 打开管道（使用 O_RDWR 避免没有读端时 O_WRONLY 阻塞）
-	asr_fd = open("/home/fifo/asr_fifo", O_RDWR);
+	asr_fd = open("/home/fifo/asr_fifo", O_WRONLY);
 	if (-1 == asr_fd)
 	{
-		fprintf(stderr, "open fifo error\n");
+		perror("open /home/fifo/asr_fifo");
+		fprintf(stderr, "若不存在请先执行 init.sh 或: mkfifo /home/fifo/asr_fifo\n");
 		clean_up();
 		return -1;
 	}

@@ -130,12 +130,20 @@ int main()
    }else {
         printf("init_button success\n");
    }
-    // //测试获取服务器上歌曲、歌手
+   if(init_asr_fifo()==-1)
+   {
+       perror("init_asr_fifo");
+       return -1;
+   }else {
+       printf("init_asr_fifo success\n");
+   }
+    // 测试获取服务器上歌曲、歌手
     socket_get_music("其他");
-    // // 遍历音乐列表
-    link_traverse_list();
-    // // 清空音乐列表
+    // 遍历音乐列表
+    // link_traverse_list();
+    // 清空音乐列表
     // link_clear_list();
+
 
     master_select();//持续监听
 }
