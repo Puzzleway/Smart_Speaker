@@ -17,7 +17,7 @@
 #include<signal.h>
 #include<fcntl.h>
 #include<sys/stat.h>
-#include <sys/sem.h>
+#include<sys/sem.h>
 #include<errno.h>
 #include<time.h>
 
@@ -34,6 +34,7 @@ int g_volume = 50; //音量，范围0-100
 int g_pause_flag = 0; //暂停标志，0表示未暂停，1表示已暂停
 int g_device_mode = ONLINE_MODE;
 int g_asrfd = 0; //asr_fifo的文件描述符
+int g_ttsfd = 0; //tts_fifo的文件描述符
 
 extern Node *g_music_head;
 extern fd_set g_readfds;
@@ -305,17 +306,15 @@ void child_process(char*music_name)
                 
 			strcat(music_path, music_name);
 
-			char *arg[9] = {0};
+			char *arg[7] = {0};
 
 			arg[0] = "mplayer";
 			arg[1] = music_path;
-			arg[2] = "-ao";
-			arg[3] = "alsa:device=hw=1.0";
-			arg[4] = "-slave";
-			arg[5] = "-quiet";
-			arg[6] = "-input";
-			arg[7] = "file=/home/fifo/cmd_fifo";
-			arg[8] = NULL;
+			arg[2] = "-slave";
+			arg[3] = "-quiet";
+			arg[4] = "-input";
+			arg[5] = "file=/home/fifo/cmd_fifo";
+			arg[6] = NULL;
 
             if(execv("/usr/bin/mplayer",arg)== -1)
             {
@@ -538,19 +537,31 @@ int write_fifo(const char* cmd)
     return 0;
 }
 
-int init_asr_fifo()
+int init_fifo()
 {
     g_asrfd = open("/home/fifo/asr_fifo",O_RDONLY);
-    if(g_asrfd == -1)
+    g_ttsfd = open("/home/fifo/tts_fifo",O_WRONLY);
+    if(g_asrfd == -1 || g_ttsfd == -1)
     {
-        perror("open /home/fifo/asr_fifo");
+        perror("open /home/fifo/asr_fifo or /home/fifo/tts_fifo");
         return -1;
     }
-
     FD_SET(g_asrfd, &g_readfds);
+    // 语音识别是读端，tts是写端，写端不需要监听
     if(g_asrfd > g_maxfd)
     {
         g_maxfd = g_asrfd;
     }
     return 0;
+}
+
+void player_singer_play(char *singer)
+{
+    // 结束当前播放，清空链表，获取歌手音乐列表
+    // 开始播放
+    player_stop_play();
+    link_clear_list();
+    socket_get_music(singer);
+    player_start_play();
+    return;
 }

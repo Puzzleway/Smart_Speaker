@@ -25,6 +25,7 @@ extern int g_socketfd;
 extern int g_tid;
 extern int g_buttonfd;
 extern int g_asrfd;
+extern int g_ttsfd;
 
 fd_set g_readfds;//监听集合
 //select()监听集合初始化函数
@@ -205,31 +206,27 @@ void select_read_asr_fifo(void)
 
     if(strstr(buf, "我想听歌") ||
     strstr(buf, "放首歌听听") ||
-    strstr(buf, "放一首歌") )
+    strstr(buf, "放一首歌") ||
+    strstr(buf, "开始播放") )
     {
         player_start_play();
     }
-    else if(strstr(buf, "暂停") ||
-    strstr(buf, "暂停播放") ||
-    strstr(buf, "暂停一下") )
+    else if(strstr(buf, "暂停") || strstr(buf, "停一下"))
     {
         player_pause_play();
     }
-    else if(strstr(buf, "继续") ||
+    else if(strstr(buf, "继续放") ||
     strstr(buf, "继续播放") ||
     strstr(buf, "接着放") )
     {
         player_continue_play();
     }
-    else if(strstr(buf, "下一首") ||
-    strstr(buf, "下一首歌") ||
-    strstr(buf, "放下一首") )
+    else if(strstr(buf, "下一首") || strstr(buf, "下一曲") || strstr(buf, "换一首") )
     {
+
         player_next_play();
     }
-    else if(strstr(buf, "上一首") ||
-    strstr(buf, "上一首歌") ||
-    strstr(buf, "放上一首") )
+    else if(strstr(buf, "上一首") ||strstr(buf, "上一曲") )
     {
         player_prev_play();
     }
@@ -239,6 +236,7 @@ void select_read_asr_fifo(void)
     strstr(buf, "声音大点") )
     {
         player_add_volume();
+        player_continue_play();
     }
     else if(strstr(buf, "减小音量") ||
     strstr(buf, "调小音量") ||
@@ -246,20 +244,53 @@ void select_read_asr_fifo(void)
     strstr(buf, "声音小点") )
     {
         player_reduce_volume();
+        player_continue_play();
     }
     else if(strstr(buf, "单曲循环") )
     {
         player_set_mode(CIRCLE);
+        player_continue_play();
     }
     else if(strstr(buf, "列表循环") )
     {
         player_set_mode(SEQUENCE);
+        player_continue_play();
     }
-    else if(strstr(buf, "停止") ||
-    strstr(buf, "停止播放") ||
-    strstr(buf, "结束") )
+    else if(strstr(buf, "停止") ||strstr(buf, "结束") )
     {
         player_stop_play();
+    }else if(strstr(buf, "小七") )
+    {// 唤醒词
+        player_pause_play();
+        // todo 回应
+        player_tts("小七在呢");
+    }else if(strstr(buf, "周杰伦") )
+    {
+        player_singer_play("周杰伦");
+    }else if(strstr(buf, "许嵩") )
+    {
+        player_singer_play("许嵩");
+    }else if(strstr(buf, "五月天") )
+    {
+        player_singer_play("五月天");
+    }else if(strstr(buf, "陈奕迅") )
+    {
+        player_singer_play("陈奕迅");
+    }else if(strstr(buf, "其他") )
+    {
+        player_singer_play("其他");
+    }
+}
+
+void player_tts(const char *text)
+{
+    if(write(g_ttsfd, text, strlen(text)) == -1)
+    {
+        perror("write tts_fifo");
+    }
+    else
+    {
+        printf("[select]write to tts_fifo: %s\n", text);
     }
 }
 

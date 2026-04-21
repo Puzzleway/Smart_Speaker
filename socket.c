@@ -66,6 +66,7 @@ void socket_send_json(struct json_object *jobj)
     }
     //printf("send %d bytes data to server\n", len);
 }
+
 void *send_to_server(void *arg)
 {
     while(1)

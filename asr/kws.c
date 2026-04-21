@@ -66,7 +66,7 @@ int sherpa_kws(float *float_buffer, int resample_frams)
 			printf("---> %s\n", r->keyword);
 
 			if (device_mode == ONLINE_MODE && 
-				!strcmp(r->keyword, "你好问问"))
+				!strcmp(r->keyword, "你好小七"))
 			{
 				if (write(asr_fd, r->keyword, strlen(r->keyword)) == -1)
 				{
@@ -76,7 +76,7 @@ int sherpa_kws(float *float_buffer, int resample_frams)
 				ret = 1;
 			}
 			else if (device_mode == OFFLINE_MODE && 
-					 strcmp(r->keyword, "你好问问")) 
+					 strcmp(r->keyword, "你好小七")) 
 			{  //离线模式，不需要 你好问问 来唤醒
 				if (write(asr_fd, r->keyword, strlen(r->keyword)) == -1)
 				{

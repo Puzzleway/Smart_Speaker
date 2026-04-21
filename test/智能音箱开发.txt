@@ -121,3 +121,29 @@
      5.完成板端声卡设备适配：根据实际设备将录音设备参数调整为可用节点（hw:0,0），解决 snd_pcm_open error，使主流程恢复可运行。 
      6.完成关键词识别失败根因定位：确认代码唤醒词与 keywords.txt 实际词条不一致（如代码用“你好小胖”，模型词表无此项），统一关键词文本。 
      7.命令工具： 安装 ALSA 开发包 apt install -y libasound2-dev 板端安装 json-c apt install -y libjson-c-dev，并统一开发板“系统默认路径”编译思路。 
+
+2026.04.19
+    1.排查 ASR 启动报「open fifo error」：根因为 init.sh 未创建 asr_fifo，已补充 mkfifo，并在 main.c 用 perror 提示缺失管道。
+    2.排查语音「暂停播放」无效：定位为 select.c 中 strstr( buf, "播放" ) 抢先匹配「暂停播放」，属判断顺序/子串过宽问题（若已本地调整可一并保留）。
+    3.梳理播放上一首/下一首异常：手动 loadfile 与 child_process 曲终 link_find_next 叠加导致短暂回跳、连跳两首；链表用 strstr 定位当前曲易误判。
+    4.完成播放与链表修复：
+          link 侧按路径最后一段文件名精确匹配；
+          共享内存增加 prev_leave_basename、manual_seek_at、post_seek_retry_used；
+          曲终逻辑支持手动切歌后短时重试同一首、上一首后曲终跳过「刚离开那首」；
+          init_shm attach 时清零新字段防旧段脏数据。
+    5.联调结论：切歌与上报行为已按预期工作，相关问题已闭环。
+
+2026.04.20
+     1.完成语音合成功能的实现，关键词唤醒后会有语音应答。
+     2.完成唤醒词的替换，你好小七。
+     3.tts语音合成进程和music_player主进程会同时打开播放设备，冲突导致无法播放，
+          需要引入混音插件asound.conf
+          将tts中设备设置为default
+
+
+2026.04.21
+     1.player.c中播放命令指定硬件的部分导致asound.conf无作用，删除硬件指定命令，音箱正常工作。
+     下一步三个工作：
+     1.云端服务器部署
+     2.QT软件开发
+     3.阿里或者deepseek大模型接入。

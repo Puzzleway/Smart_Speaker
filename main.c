@@ -130,12 +130,12 @@ int main()
    }else {
         printf("init_button success\n");
    }
-   if(init_asr_fifo()==-1)
+   if(init_fifo()==-1)
    {
-       perror("init_asr_fifo");
+       perror("init_fifo");
        return -1;
    }else {
-       printf("init_asr_fifo success\n");
+       printf("init_fifo success\n");
    }
     // 测试获取服务器上歌曲、歌手
     socket_get_music("其他");

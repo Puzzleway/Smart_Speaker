@@ -69,5 +69,7 @@ void player_add_volume(void);
 void player_reduce_volume(void);
 void player_set_mode(int mode);
 int write_fifo(const char* cmd);
-int init_asr_fifo(void);
+int init_fifo(void);
+void player_singer_play(char *singer);
+void player_tts(const char *text);
 #endif

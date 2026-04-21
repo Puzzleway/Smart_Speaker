@@ -11,6 +11,7 @@
 
 // #define DEVICE_NAME "hw:AudioPCI"  //虚拟机ALSA设备名称
 #define DEVICE_NAME "hw:audiocodec"  //开发板ALSA设备名称
+//#define DEVICE_NAME "default"  //混音器设备名称
 // #define DEVICE_ELEMENT "Master"   //虚拟机ALSA设备元素名称
 #define DEVICE_ELEMENT "lineout volume"   //开发板ALSA设备元素名称
 
