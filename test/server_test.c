@@ -7,6 +7,8 @@
 #include<netinet/in.h>
 #include<pthread.h>  // 添加pthread头文件
 #include<json-c/json.h>
+#include<stdlib.h>
+#include<errno.h>
 
 //测试服务端
 //测试socket连接是否成功
@@ -37,41 +39,83 @@ void send_to_client(int fd, struct json_object *obj)
     printf("send data: %s\n", data);
 }
 
+static int recv_exact(int fd, void *buf, size_t len)
+{
+    size_t recved = 0;
+    while (recved < len)
+    {
+        ssize_t n = recv(fd, (char *)buf + recved, len - recved, 0);
+        if (n == 0)
+        {
+            return 0; // 对端关闭连接
+        }
+        if (n < 0)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+            return -1;
+        }
+        recved += (size_t)n;
+    }
+    return 1;
+}
+
 void *recv_from_client(void *arg)
 {
     int clientfd = *(int *)arg;
+    free(arg);
     char buf[1024] = {0};
     int len = 0;
-    size_t size = 0;
+
+    // 每次新连接先主动下发一条测试命令
+    struct json_object *hello = json_object_new_object();
+    json_object_object_add(hello, "cmd", json_object_new_string("app_get_music"));
+    send_to_client(clientfd, hello);
+    json_object_put(hello);
+
     while(1)
     {
-        while(1)
+        int ret = recv_exact(clientfd, &len, sizeof(int));
+        if (ret <= 0)
         {
-            size += recv(clientfd, buf+size, 4-size, 0);//头4字节表示数据长度,第二个参数是接收数据的缓冲区指针,第三个参数是接收数据的长度,第四个参数是接收数据的方式,输入参数0表示默认接收方式
-            if(size >= 4)
-            {
-                break;//接收到了完整的头部，跳出循环
-            }
+            printf("client disconnected(fd=%d)\n", clientfd);
+            break;
         }
-        size = 0;//重置size，准备接收数据
-        
-        len = *(int *)buf;//从头部获取数据长度,注意buf是char类型的指针，需要强制转换为int类型的指针，然后解引用获取数据长度
-        memset(buf, 0, sizeof(buf));//清空缓冲区,准备接收数据
-        printf("recv data length: %d\n", len);
-        while(1)
+
+        if (len <= 0 || len >= (int)sizeof(buf))
         {
-            size += recv(clientfd, buf+size, len-size, 0);//接收数据，直到接收完整
-            if(size >= len)
-            {
-                break;//接收到了完整的数据，跳出循环
-            }
+            printf("invalid packet length: %d, close client(fd=%d)\n", len, clientfd);
+            break;
+        }
+
+        memset(buf, 0, sizeof(buf));
+        printf("recv data length: %d\n", len);
+
+        ret = recv_exact(clientfd, buf, (size_t)len);
+        if (ret <= 0)
+        {
+            printf("client disconnected while receiving body(fd=%d)\n", clientfd);
+            break;
         }
         printf("recv data: %s\n", buf);
 
         //把字符串转换成json对象
 		struct json_object *obj = json_tokener_parse(buf);
-		struct json_object *val ;
-        json_object_object_get_ex(obj, "cmd",&val);
+        if (obj == NULL)
+        {
+            printf("invalid json from client(fd=%d)\n", clientfd);
+            continue;
+        }
+
+		struct json_object *val = NULL;
+        if (!json_object_object_get_ex(obj, "cmd", &val))
+        {
+            json_object_put(obj);
+            continue;
+        }
+
 		if (!strcmp("get_music_list", json_object_get_string(val)))
 		{
 			//返回音乐数据
@@ -99,10 +143,9 @@ void *recv_from_client(void *arg)
             json_object_put(snd_obj);
 		}
 
-		memset(buf, 0, sizeof(buf));
-		size = 0;
-	
+        json_object_put(obj);
     }
+    close(clientfd);
     return NULL;
 }
 int main()
@@ -136,68 +179,39 @@ int main()
     }
     printf("server is listening...\n");
 
-    struct sockaddr_in client_addr;//客户端地址结构
+    while(1)
+    {
+        struct sockaddr_in client_addr;//客户端地址结构
         socklen_t client_addr_len = sizeof(client_addr);//客户端地址结构长度
         int clientfd = accept(socketfd, (struct sockaddr *)&client_addr, &client_addr_len);//接受客户端连接
         if(clientfd < 0)
-        {//接受连接失败，返回-1
+        {
             perror("accept");
-            return -1;
+            continue;
         }
-    printf("client connected: %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
-    pthread_t tid;
-    //接收客户端发送的数据
-    pthread_create(&tid, NULL, recv_from_client, (void *)&clientfd);
-    // sleep(2);// 等待2秒
-    //测试客户端对app命令的处理
-    // struct json_object *obj = json_object_new_object();
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_start"));
-    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端开始播放
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_mode_circle"));
-    // send_to_client(clientfd, obj);
-    // sleep(5);
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_next"));
-    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端下一首
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_mode_sequence"));
-    // send_to_client(clientfd, obj);
-    // sleep(5);
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_add_volume"));
-    // send_to_client(clientfd, obj);
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_add_volume"));
-    // send_to_client(clientfd, obj);
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_next"));
-    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端下一首
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_pause"));
-    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端暂停播放
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_continue"));
-    // send_to_client(clientfd, obj);
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_reduce_volume"));
-    // send_to_client(clientfd, obj);
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_reduce_volume"));
-    // send_to_client(clientfd, obj);
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_prev"));
-    // send_to_client(clientfd, obj);
-    // sleep(5);// 等待
-    // json_object_object_add(obj, "cmd", json_object_new_string("app_stop"));
-    // send_to_client(clientfd, obj);//向客户端发送数据，通知客户端停止播放
-    // json_object_put(obj);//释放json对象
+        printf("client connected: %s:%d\n",
+            inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
+        int *pfd = (int *)malloc(sizeof(int));
+        if (pfd == NULL)
+        {
+            perror("malloc");
+            close(clientfd);
+            continue;
+        }
+        *pfd = clientfd;
 
-    while(1)
-    {
-        
-        
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, recv_from_client, (void *)pfd) != 0)
+        {
+            perror("pthread_create");
+            close(clientfd);
+            free(pfd);
+            continue;
+        }
+        pthread_detach(tid);
     }
-
-    close(clientfd);//关闭客户端连接
     close(socketfd);//关闭socket
 
     return 0;

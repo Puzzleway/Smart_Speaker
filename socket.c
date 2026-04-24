@@ -109,6 +109,8 @@ void *send_to_server(void *arg)
 
     }
 }
+
+// 初始化socket，连接服务器
 int init_socket(void)
 {
     g_socketfd = socket(AF_INET, SOCK_STREAM, 0);//tcp协议,流式socket
@@ -196,20 +198,44 @@ void socket_get_music(const char *singer)
 	//向服务器请求音乐数据
 	socket_send_json(obj);
 
-	//等待服务器返回
+	//等待服务器返回，忽略服务端主动下发的非歌单消息
 	char msg[1024] = {0};
-	socket_recv_data(msg);
+    char cmd[64] = {0};
+    int retry = 10;
+    while (retry--)
+    {
+        memset(msg, 0, sizeof(msg));
+	    socket_recv_data(msg);
 
-	//把音乐数据插入链表
-	if(link_create_list(msg)<0)
-	{
-		printf("create list failed\n");
-		return;
-	}
-    
-		
-	//释放json对象
-	json_object_put(obj);
+        struct json_object *recv_obj = json_tokener_parse(msg);
+        if (recv_obj == NULL)
+        {
+            continue;
+        }
+        struct json_object *val = NULL;
+        if (!json_object_object_get_ex(recv_obj, "cmd", &val))
+        {
+            json_object_put(recv_obj);
+            continue;
+        }
+        strncpy(cmd, json_object_get_string(val), sizeof(cmd) - 1);
+        cmd[sizeof(cmd) - 1] = '\0';
+        json_object_put(recv_obj);
+
+        if (strcmp(cmd, "reply_music") == 0)
+        {
+            if (link_create_list(msg) < 0)
+            {
+                printf("create list failed\n");
+            }
+            json_object_put(obj);
+            return;
+        }
+        printf("skip msg while waiting reply_music: %s\n", cmd);
+    }
+
+    printf("get_music timeout: no reply_music received\n");
+    json_object_put(obj);
 }
 
 void socket_update_music(int sig)
@@ -443,4 +469,35 @@ void socket_set_mode(int mode)
     }
     socket_send_json(jobj);
     json_object_put(jobj);
+}
+
+void socket_upload_music(void)
+{
+    struct json_object *jobj = json_object_new_object();
+    json_object_object_add(jobj, "cmd", json_object_new_string("app_upload_music_reply"));
+    struct json_object *array = json_object_new_array();
+    Node *p = g_music_head;
+    while(p != NULL)
+    {//将音乐名称添加到数组中
+        json_object_array_add(array, json_object_new_string(p->music_name));
+        p = p->next;
+    }
+    json_object_object_add(jobj, "music", array);//将数组添加到json对象中
+    socket_send_json(jobj);//发送json对象到服务器
+    json_object_put(jobj);//释放json对象`
+}
+
+// 断开网络连接
+void socket_disconnect(void)
+{
+    // 取消线程
+    pthread_cancel(g_tid);
+    // 取消网络监听,把socket文件描述符从监听集合中删除
+    FD_CLR(g_socketfd, &g_readfds);
+    if(g_maxfd == g_socketfd)
+    {
+        g_maxfd = g_maxfd - 1;
+    }
+    // 关闭socket文件描述符
+    close(g_socketfd);
 }

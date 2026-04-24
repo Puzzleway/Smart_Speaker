@@ -55,6 +55,7 @@ void change_handler(int s)
 		speaker_id = 1;
 }
 
+
 int main()
 {
 	signal(SIGINT, quit_handler);
@@ -103,7 +104,7 @@ int main()
 			continue;
 		}
 
-		play_flag = 1;
+		play_flag = 1;//设置合成标志位为1，表示可以合成语音
 
 		snd_pcm_prepare(pcmp);  // PREPARED状态
 
@@ -113,7 +114,7 @@ int main()
 
 		//等待缓冲区数据播放完毕
 		snd_pcm_drain(pcmp);    // SETUP状态
-	
+		//清空buf，否则下一次读取管道数据时，会读取到上一次的数据，导致合成语音重复
 		memset(buf, 0, sizeof(buf));
 	}
 

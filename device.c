@@ -195,7 +195,7 @@ void device_read_button(void)
             if((time2.tv_sec*1000 + time2.tv_usec/1000) - (time1.tv_sec*1000 + time1.tv_usec/1000) > 500)//按下持续时间大于500毫秒，认为是长按
             {
                 //printf("long press\n");
-                player_stop_play();//长按停止播放
+                player_prev_play();//长按上一首
                 g_button_state = STATE_IDLE;
             }else if((time2.tv_sec*1000 + time2.tv_usec/1000) - (time1.tv_sec*1000 + time1.tv_usec/1000) <= 500)//按下持续时间小于等于500毫秒，进入短按/双击判定
             {

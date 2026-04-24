@@ -57,6 +57,7 @@ int init_alsa_playback()
 	return 0;
 }
 
+// 回调函数，用于播放音频数据
 int32_t play_callback(const float *samples, int32_t n)
 {
 	if (!play_flag)

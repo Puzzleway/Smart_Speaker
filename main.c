@@ -113,16 +113,7 @@ int main()
     }else {
         printf("device_set_volume success\n");
     }
-    //初始化网络
-    if(init_socket()==-1)
-    {
-        perror("init_socket");
-        //网络初始化失败，进入离线模式，继续执行后续的初始化
-        /* TODO: 离线模式*/
-    }else {
-        printf("init_socket success\n");
-    }
-    //初始化按键
+     //初始化按键
    if(init_button()==-1)
    {
         perror("init_button");
@@ -137,13 +128,28 @@ int main()
    }else {
        printf("init_fifo success\n");
    }
+    //初始化网络
+    if(init_socket()==-1)
+    {
+        perror("init_socket");
+
+        //网络初始化失败，进入离线模式，继续执行后续的初始化
+        /* TODO: 离线模式*/
+        if(player_offline_mode()==-1)
+        {
+            perror("player_offline_mode");
+            return -1;
+        }
+        master_select();//持续监听
+    }else {
+        printf("init_socket success\n");
+    }
+   
     // 测试获取服务器上歌曲、歌手
     socket_get_music("其他");
     // 遍历音乐列表
     // link_traverse_list();
     // 清空音乐列表
     // link_clear_list();
-
-
     master_select();//持续监听
 }

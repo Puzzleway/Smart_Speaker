@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <json-c/json.h>
+#include <dirent.h>
 #include "link.h"
 #include "player.h"
 
@@ -241,4 +242,57 @@ Node *link_find_tail(Node *p)//查找链表末尾
         p = p->next;
     }
     return p;
+}
+
+int link_is_space(const char *name)
+{
+    const char *p = name;
+    while(*p != '\0')
+    {
+        if(*p == ' ')
+        {
+            return 1;
+        }
+        p++;
+    }
+    return 0;
+}
+
+//离线模式，读取U盘中的音乐文件，并插入链表
+int link_read_offline_music(void)
+{
+    link_clear_list();//清空链表
+    char music_name[128] = {0};
+    DIR *dir = opendir("/mnt/usb");
+    if(dir == NULL)
+    {
+        perror("opendir");
+        return -1;
+    }
+    struct dirent *file;//dirent结构体，用于读取目录中的文件
+    while((file = readdir(dir)) != NULL)
+    {
+        if(file->d_type != DT_REG)//只读取普通文件
+        {
+            continue;
+        }
+        if(strstr(file->d_name, ".mp3") == NULL)//只读取mp3文件
+        {
+            continue;
+        }
+        if(link_is_space(file->d_name))//文件名中包含空格
+        {
+            //给带空格的文件名加上引号
+            strcpy(music_name, "\"");
+            strcat(music_name, file->d_name);
+            strcat(music_name, "\"");
+        }else//文件名中不包含空格
+        {
+            strcpy(music_name, file->d_name);
+        }
+        link_insert_elem(music_name);//插入链表
+        memset(music_name, 0, sizeof(music_name));//清空音乐名称，防止下一次插入时被覆盖
+    }
+    closedir(dir);
+    return 0;
 }

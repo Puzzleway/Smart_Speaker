@@ -26,6 +26,7 @@ extern int g_tid;
 extern int g_buttonfd;
 extern int g_asrfd;
 extern int g_ttsfd;
+extern int g_device_mode;
 
 fd_set g_readfds;//监听集合
 //select()监听集合初始化函数
@@ -171,6 +172,9 @@ void select_read_socket(void)
     }else if(strcmp(cmd, "app_mode_circle") == 0)
     {
         socket_set_mode(CIRCLE);
+    }else if(strcmp(cmd, "app_get_music") == 0)
+    {
+        socket_upload_music();
     }
 
 }
@@ -256,12 +260,13 @@ void select_read_asr_fifo(void)
         player_set_mode(SEQUENCE);
         player_continue_play();
     }
-    else if(strstr(buf, "停止") ||strstr(buf, "结束") )
+    else if(strstr(buf, "停止") ||strstr(buf, "结束") ||strstr(buf, "不想听了") )
     {
         player_stop_play();
     }else if(strstr(buf, "小七") )
     {// 唤醒词
         player_pause_play();
+        player_stop_tts();//停止正在进行的tts合成
         // todo 回应
         player_tts("小七在呢");
     }else if(strstr(buf, "周杰伦") )
@@ -279,20 +284,29 @@ void select_read_asr_fifo(void)
     }else if(strstr(buf, "其他") )
     {
         player_singer_play("其他");
+    }else if(strstr(buf, "换") && strstr(buf, "声音") )
+    {
+        player_change_voice();
+    }else if(strstr(buf, "离线模式") )
+    {
+        player_offline_mode();
+    }else if(strstr(buf, "在线模式") )
+    {
+        player_online_mode();
+    }
+    else// 其他情况，调用qwen模型进行对话
+    {
+        if(g_device_mode == OFFLINE_MODE)
+        {
+            player_tts("对不起，我现在处于离线模式\n");
+            return;
+        }
+        char cmd[2048] = {0};
+        snprintf(cmd, sizeof(cmd), "/home/qwen/qwen %s", buf);//将buf中的内容作为参数传递给qwen模型
+        system(cmd);//系统调用执行qwen模型，阻塞等待qwen模型返回结果
     }
 }
 
-void player_tts(const char *text)
-{
-    if(write(g_ttsfd, text, strlen(text)) == -1)
-    {
-        perror("write tts_fifo");
-    }
-    else
-    {
-        printf("[select]write to tts_fifo: %s\n", text);
-    }
-}
 
 void master_select(void)
 { 

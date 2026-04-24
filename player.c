@@ -20,7 +20,7 @@
 #include<sys/sem.h>
 #include<errno.h>
 #include<time.h>
-
+#include<sys/mount.h>
 
 #include "player.h"
 #include "link.h"
@@ -181,14 +181,20 @@ void parent_set_shm_data(SHM_DATA shm_data)
 void player_start_play(void)
 {
     if(g_start_flag == 1)return;
+    if(g_music_head == NULL || g_music_head->next == NULL)
+    {
+        printf("music list is empty, can not start play\n");
+        player_tts("当前歌单为空，请先点歌\n");
+        return;
+    }
     SHM_DATA sd;
     parent_get_shm_data(&sd);
     sd.prev_leave_basename[0] = '\0';
     sd.manual_seek_at = 0;
     sd.post_seek_retry_used = 0;
-    player_sem_p();
-    parent_set_shm_data(sd);
-    player_sem_v();
+    player_sem_p();//P操作，进入临界区,信号量的值减1
+    parent_set_shm_data(sd);//设置共享内存
+    player_sem_v();//V操作，退出临界区,信号量的值加1
 
     char music_name[128] = {0};
     strcpy(music_name,g_music_head->next->music_name);
@@ -200,17 +206,17 @@ void player_start_play(void)
 // 播放音乐的函数
 void player_play_music(char *music_name)
 {
-    pid_t pid = fork();
+    pid_t pid = fork();//创建子进程
     
     if (pid < 0) {
         perror("fork");
         return;
-    } else if (pid == 0) {
-        signal(SIGUSR1,child_quit_process);
-        child_process(music_name);
+    } else if (pid == 0) {// 子进程
+        signal(SIGUSR1,child_quit_process);//注册信号处理函数,一旦收到SIGUSR1信号，则执行child_quit_process函数
+        child_process(music_name);//执行子进程
         exit(0);
     } else {
-        // 父进程：
+        // 父进程：等待子进程结束
         return;
     }
 }
@@ -218,13 +224,15 @@ void player_play_music(char *music_name)
 void child_quit_process(int sig)
 {
     g_start_flag = 0; //修改标志位
+    g_pause_flag = 0;
+
 }
 
 void child_process(char*music_name)
 {
     while(g_start_flag)//继承自父进程
     {
-        pid_t pid = fork();
+        pid_t pid = fork();//创建孙进程
         if(pid == -1)
         {
             perror("CHILD FORK");
@@ -253,11 +261,18 @@ void child_process(char*music_name)
                     s.post_seek_retry_used = 0;
                     if (link_find_next(s.mode, s.music_name, music_name) == -1)
                     {
-                        printf("全部歌曲播放完毕······\n");
-                        kill(s.parent_pid,SIGUSR1);
-                        kill(s.child_pid,SIGUSR1);
-                        usleep(100000);
-                        exit(0);
+                        if(g_device_mode == OFFLINE_MODE)
+                        {//离线模式，循环播放
+                            strcpy(music_name,g_music_head->next->music_name);
+                        }
+                        if(g_device_mode == ONLINE_MODE)
+                        {//在线模式，播放完毕，退出进程
+                            printf("全部歌曲播放完毕······\n");
+                            kill(s.parent_pid,SIGUSR1);
+                            kill(s.child_pid,SIGUSR1);
+                            usleep(100000);
+                            exit(0);
+                        }
                     }
 
                     parent_get_shm_data(&s);
@@ -274,6 +289,7 @@ void child_process(char*music_name)
                                 strcpy(music_name, nb->next->music_name);
                         }
                         s.prev_leave_basename[0] = '\0';
+
                         player_sem_p();
                         parent_set_shm_data(s);
                         player_sem_v();
@@ -293,11 +309,16 @@ void child_process(char*music_name)
                 }
                 strncpy(s.singer,music_name,p-music_name);
                 strcpy(s.music_name,p+1);//
-                
             }
+            else if(g_device_mode == OFFLINE_MODE)
+            {
+                strcpy(s.music_name,music_name);
+            }
+
             player_sem_p();//P操作，进入临界区
             parent_set_shm_data(s);
             player_sem_v();//V操作，退出临界区
+
             char music_path[128]={0};
             if (g_device_mode == ONLINE_MODE)
 				strcpy(music_path, ONLINE_URL);
@@ -306,8 +327,7 @@ void child_process(char*music_name)
                 
 			strcat(music_path, music_name);
 
-			char *arg[7] = {0};
-
+			char *arg[7] = {0};//mplayer命令参数
 			arg[0] = "mplayer";
 			arg[1] = music_path;
 			arg[2] = "-slave";
@@ -316,10 +336,10 @@ void child_process(char*music_name)
 			arg[5] = "file=/home/fifo/cmd_fifo";
 			arg[6] = NULL;
 
-            if(execv("/usr/bin/mplayer",arg)== -1)
+            if(execv("/usr/bin/mplayer",arg)== -1)//执行mplayer命令
             {
                 fprintf(stderr,"[ERROR]MPLAYER failed to start\n");
-                kill(s.child_pid,SIGUSR1);
+                kill(s.child_pid,SIGUSR1);//发送SIGUSR1信号给子进程，通知子进程结束
                 exit(-1);
             }
         }else
@@ -327,13 +347,14 @@ void child_process(char*music_name)
             //注意不同进程有不同的地址空间
             memset(music_name,0,strlen(music_name));//清空，防止新的孙进程继承旧的歌曲名
             int status;
-            wait(&status);
+            wait(&status);//等待孙进程结束
         }
     }
 }
 
 void player_stop_play(void)
 {
+    if(g_start_flag == 0)return;//没有播放，直接返回
     SHM_DATA shm_data;
     parent_get_shm_data(&shm_data);
     kill(shm_data.child_pid,SIGUSR1);
@@ -377,12 +398,11 @@ void player_next_play(void)
             link_clear_list();
             socket_get_music(shm_data.singer);
             player_start_play();
+            socket_upload_music();// 上传音乐列表
             return;
         }else if(g_device_mode == OFFLINE_MODE)
-        {
-            printf("全部歌曲播放完毕······\n");
-            player_stop_play();
-            return;
+        {//离线模式，循环播放
+            strcpy(music_name,g_music_head->next->music_name);
         }
     }
     if(g_device_mode == ONLINE_MODE)
@@ -410,7 +430,7 @@ void player_next_play(void)
 	else if (g_device_mode == OFFLINE_MODE)
 		strcpy(music_path, OFFLINE_URL);
     strcat(music_path, music_name);
-    sprintf(cmd,"loadfile %s\n",music_path);
+    snprintf(cmd, sizeof(cmd), "loadfile \"%s\"\n", music_path);
     write_fifo(cmd);
     g_start_flag = 1;
     g_pause_flag = 0;
@@ -470,7 +490,7 @@ void player_prev_play(void)
     else if (g_device_mode == OFFLINE_MODE)
 		strcpy(music_path, OFFLINE_URL);
     strcat(music_path, music_name);
-    sprintf(cmd,"loadfile %s\n",music_path);
+    snprintf(cmd, sizeof(cmd), "loadfile \"%s\"\n", music_path);
     write_fifo(cmd);
     g_start_flag = 1;
     g_pause_flag = 0;
@@ -563,5 +583,138 @@ void player_singer_play(char *singer)
     link_clear_list();
     socket_get_music(singer);
     player_start_play();
+    socket_upload_music();// 上传音乐列表
     return;
+}
+
+void player_tts(const char *text)
+{
+    if(write(g_ttsfd, text, strlen(text)) == -1)
+    {
+        perror("write tts_fifo");
+    }
+}
+
+void player_stop_tts(void)
+{
+    FILE *fp = popen("pgrep tts", "r");//执行pgrep tts命令，返回一个文件指针
+    if(fp == NULL)
+    {
+        perror("popen");
+        return;
+    }
+    char buf[32] = {0};
+    fgets(buf, sizeof(buf), fp);//读取文件指针fp中的数据到buf中
+
+    pid_t pid = atoi(buf);//将buf中的内容转换为pid_t类型
+    pclose(fp);//关闭文件指针fp，释放资源
+    if(pid > 0)
+    {
+        kill(pid, SIGUSR1);//杀死pid进程
+    }
+}
+
+void player_change_voice(void)
+{
+    FILE *fp = popen("pgrep tts", "r");
+    if(fp == NULL)
+    {
+        perror("popen");
+        return;
+    }
+    char buf[32] = {0};
+    fgets(buf, sizeof(buf), fp);
+    pid_t pid = atoi(buf);
+    pclose(fp);
+    if(pid > 0)
+    {
+        kill(pid, SIGUSR2);
+    }
+    usleep(100000);//等待100ms
+    player_tts("好的，新声音怎么样？");
+}
+
+// 离线模式
+int player_offline_mode(void)
+{
+    if(g_device_mode == OFFLINE_MODE)return 0;
+    char device_name[64] = "/dev/sda1";// U盘设备名称
+    if(access(device_name, F_OK) == -1)
+    {
+        if(access("/dev/sdb1", F_OK) == -1)// ACCESS检查文件是否存在
+        {
+            if(access("/dev/sdc1", F_OK) == -1)
+            {
+
+                printf("No external storage device found\n");
+                player_tts("没有找到外部存储设备\n");
+                return -1;
+            }
+        }
+    }
+    if(access("/mnt/usb", F_OK) != 0)
+    {
+        if(mkdir("/mnt/usb", 0755) == -1)
+        {
+            perror("mkdir");
+            return -1;
+        }
+    }
+    umount("/mnt/usb");//卸载U盘,防止重复挂载
+    rmdir("/mnt/usb");//删除U盘目录,防止重复挂载
+    if(mkdir("/mnt/usb", 0755) == -1)
+    {
+        perror("mkdir");
+        return -1;
+    }
+    // 挂载U盘
+    if(mount(device_name, "/mnt/usb", "exfat", 0, NULL) != 0)
+    {
+        perror("mount");
+        player_tts("挂载U盘失败\n");
+        return -1;
+    }
+    if(link_read_offline_music() == -1)
+    {
+        perror("link_read_offline_music");
+        player_tts("读取U盘中的音乐文件失败\n");
+        return -1;
+    }
+    link_traverse_list();//遍历链表
+    // 断开网络连接,取消向服务器上报数据的线程
+    socket_disconnect();
+    // 回收播放进程
+    player_stop_play();
+    // 设置设备模式为离线模式
+    g_device_mode = OFFLINE_MODE;
+    player_tts("已经进入离线模式\n");
+    return 0;
+}
+
+// 在线模式
+int player_online_mode(void)
+{
+    if(g_device_mode == ONLINE_MODE)return 0;
+    player_stop_play();
+    if(init_socket()==-1)
+    {
+        perror("init_socket");
+        player_tts("网络连接失败，请检查网络连接\n");
+        return -1;
+    }
+    SHM_DATA sd;
+    parent_get_shm_data(&sd);
+    sd.music_name[0] = '\0';
+    sd.singer[0] = '\0';
+    sd.prev_leave_basename[0] = '\0';
+    sd.manual_seek_at = 0;
+    sd.post_seek_retry_used = 0;
+    player_sem_p();
+    parent_set_shm_data(sd);
+    player_sem_v();
+
+    link_clear_list();
+    socket_get_music("其他");
+    player_tts("网络连接成功\n");
+    return 0;
 }

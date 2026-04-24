@@ -26,5 +26,7 @@ void socket_prev_play(void);
 void socket_add_volume(void);
 void socket_reduce_volume(void);
 void socket_set_mode(int mode);
+void socket_upload_music(void);
+void socket_disconnect(void);
 
 #endif

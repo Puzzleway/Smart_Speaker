@@ -107,7 +107,7 @@ int main()
 	{
 		//读取数据
 		snd_pcm_sframes_t frams_read;
-		frams_read = snd_pcm_readi(pcmp, buffer, frams_per_buffer);
+		frams_read = snd_pcm_readi(pcmp, buffer, frams_per_buffer);//读取音频数据到buffer中，返回读取的帧数
 		if (-EPIPE == frams_read)
 		{
 			// 缓冲区欠载
@@ -122,6 +122,7 @@ int main()
 
 		//重采样
 		//计算重采样后的帧数
+		// 重采样帧数 = 原始帧数 * 目标采样率 / 原始采样率 + 0.5
 		size_t resample_frams = frams_read * target_rate / sample_rate + 0.5;
 		int16_t *resample_buffer = malloc(sizeof(int16_t) * resample_frams);
 		if (resample_buffer == NULL)
@@ -129,7 +130,7 @@ int main()
 			fprintf(stderr, "resample buffer malloc failure\n");
 			break;
 		}
-
+		// 重采样
 		resample_linear(buffer, frams_read, resample_buffer, resample_frams);
 
 		float *float_buffer = malloc(sizeof(float) * resample_frams);
@@ -167,7 +168,7 @@ int main()
 					printf("请说话...\n");
 	
 					//sleep(2);
-					usleep(1200000);
+					usleep(1500000);//等待回应播放完毕
 					snd_pcm_drop(pcmp);   //清空缓冲区 变成SETUP状态
 					snd_pcm_prepare(pcmp);
 				}

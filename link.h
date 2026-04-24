@@ -27,5 +27,6 @@ int link_find_prev(int mode, char *cur_name,char *prev_name);
 Node *link_find_tail(Node *p);
 Node *link_find_node_by_ref(const char *cur_ref);
 int link_full_path_by_basename(const char *basename, char *full_out);
+int link_read_offline_music(void);
 
 #endif

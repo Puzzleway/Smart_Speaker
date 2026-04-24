@@ -24,7 +24,7 @@
 #define OFFLINE_MODE 2
 
 #define ONLINE_URL "http://180.76.142.171/music/"
-#define OFFLINE_URL "file:///home/puzzleway/music/"
+#define OFFLINE_URL "/mnt/usb/"
 
 //
 union semun
@@ -72,4 +72,8 @@ int write_fifo(const char* cmd);
 int init_fifo(void);
 void player_singer_play(char *singer);
 void player_tts(const char *text);
+void player_stop_tts(void);
+void player_change_voice(void);
+int player_offline_mode(void);
+int player_online_mode(void);
 #endif

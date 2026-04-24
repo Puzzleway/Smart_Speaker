@@ -58,16 +58,31 @@ int init_alsa()
 	return 0;
 }
 
+// 线性重采样
+// 输入：原始音频数据
+// 输入长度：原始音频数据长度
+// 输出：重采样后的音频数据
+// 输出长度：重采样后的音频数据长度
 void resample_linear(int16_t *input, int in_len, 
 						int16_t *output, int out_len)
 {
-	if (0 == in_len || 0 == out_len)
+	if (0 == in_len || 0 == out_len)// 如果输入长度或输出长度为0，则返回
 		return;
 
-	if (1 == in_len || 1 == out_len)
-		output[0] = input[0];
+	if (1 == in_len || 1 == out_len)// 如果输入长度或输出长度为1，则输出为输入
+	{
+		if (out_len == 1) {            // 避免除零
+			output[0] = input[0];
+			return;
+		}
+		if (in_len == 1) {             // 单点输入，整段常量输出
+			for (int i = 0; i < out_len; ++i) output[i] = input[0];
+			return;
+		}
+	}
+	
 
-	double ratio = (double)(in_len - 1) / (out_len - 1);
+	double ratio = (double)(in_len - 1) / (out_len - 1);//计算重采样比例
 
 	for (int i = 0; i < out_len; i++)
 	{
